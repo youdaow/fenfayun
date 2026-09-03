@@ -1,0 +1,12 @@
+node_modules
+out
+release
+dist
+data
+*.log
+.DS_Store
+.vite
+
+# dev screenshots
+scripts/verify-shots/
+verify-*.png

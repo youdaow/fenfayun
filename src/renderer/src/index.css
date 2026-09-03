@@ -1,0 +1,248 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   分发云 · 主题令牌
+   黑白灰双主题：深色默认（中性炭黑），浅色标准白。
+   品牌蓝绿仅作为点缀色（按钮/高亮/图表），不参与底色。
+   html[data-theme='light'] 时整组变量切换，工具类引用 var 自动适配。
+   ============================================================ */
+
+@theme {
+  /* 中性炭黑基底 */
+  --color-ink-950: #0b0d12;
+  --color-ink-900: #0f1115;
+  --color-ink-850: #14171d;
+  --color-ink-800: #191d25;
+  --color-ink-700: #232833;
+  --color-ink-600: #313846;
+  --color-ink-500: #4a5265;
+  --color-ink-400: #6b7488;
+  --color-ink-300: #98a1b3;
+  --color-ink-200: #c3cad8;
+  --color-ink-100: #e6e9ef;
+
+  /* 品牌蓝绿 */
+  --color-brand-700: #0c7d74;
+  --color-brand-600: #0ea598;
+  --color-brand-500: #14c2ae;
+  --color-brand-400: #36e0c8;
+  --color-brand-300: #7beddd;
+  --color-brand-200: #b5f6ec;
+  --color-aqua-400: #2bd4e5;
+
+  /* 阴影 / 描边 */
+  --color-glow: rgba(20, 194, 174, 0.35);
+}
+
+/* ---------- 浅色主题（标准白） ---------- */
+[data-theme='light'] {
+  --color-ink-950: #fafafa;
+  --color-ink-900: #f5f5f7;
+  --color-ink-850: #ffffff;
+  --color-ink-800: #ebebef;
+  --color-ink-700: #e2e2e7;
+  --color-ink-600: #cfd0d6;
+  --color-ink-500: #a0a0a8;
+  --color-ink-400: #6e6e76;
+  --color-ink-300: #48484f;
+  --color-ink-200: #2c2c31;
+  --color-ink-100: #1a1a1e;
+
+  --color-brand-700: #0a6e66;
+  --color-brand-600: #0b8b80;
+  --color-brand-500: #0fa89a;
+  --color-brand-400: #0c9c8e;
+  --color-brand-300: #0b8a7e;
+  --color-brand-200: #a7e8de;
+  --color-aqua-400: #0891b2;
+
+  --color-glow: rgba(15, 168, 154, 0.25);
+
+  /* 内置彩色在浅底下提高对比 */
+  --color-emerald-300: #059669;
+  --color-emerald-400: #059669;
+  --color-red-300: #dc2626;
+  --color-amber-300: #b45309;
+}
+
+/* ============================================================
+   可选配色方案（设置页切换，存 settings.accent）
+   html[data-accent='…'] 覆盖品牌变量；浅色主题下再压深保证对比。
+   ============================================================ */
+html[data-accent='ocean'] {
+  --color-brand-700: #1d4ed8;
+  --color-brand-600: #2563eb;
+  --color-brand-500: #3b82f6;
+  --color-brand-400: #60a5fa;
+  --color-brand-300: #93c5fd;
+  --color-brand-200: #bfdbfe;
+  --color-aqua-400: #38bdf8;
+  --color-glow: rgba(59, 130, 246, 0.35);
+}
+html[data-accent='violet'] {
+  --color-brand-700: #6d28d9;
+  --color-brand-600: #7c3aed;
+  --color-brand-500: #8b5cf6;
+  --color-brand-400: #a78bfa;
+  --color-brand-300: #c4b5fd;
+  --color-brand-200: #ddd6fe;
+  --color-aqua-400: #c084fc;
+  --color-glow: rgba(139, 92, 246, 0.35);
+}
+html[data-accent='sunset'] {
+  --color-brand-700: #c2410c;
+  --color-brand-600: #ea580c;
+  --color-brand-500: #f97316;
+  --color-brand-400: #fb923c;
+  --color-brand-300: #fdba74;
+  --color-brand-200: #fed7aa;
+  --color-aqua-400: #fbbf24;
+  --color-glow: rgba(249, 115, 22, 0.35);
+}
+html[data-accent='sakura'] {
+  --color-brand-700: #be185d;
+  --color-brand-600: #db2777;
+  --color-brand-500: #ec4899;
+  --color-brand-400: #f472b6;
+  --color-brand-300: #f9a8d4;
+  --color-brand-200: #fbcfe8;
+  --color-aqua-400: #f0abfc;
+  --color-glow: rgba(236, 72, 153, 0.35);
+}
+html[data-accent='emerald'] {
+  --color-brand-700: #047857;
+  --color-brand-600: #059669;
+  --color-brand-500: #10b981;
+  --color-brand-400: #34d399;
+  --color-brand-300: #6ee7b7;
+  --color-brand-200: #a7f3d0;
+  --color-aqua-400: #2dd4bf;
+  --color-glow: rgba(16, 185, 129, 0.35);
+}
+
+/* 浅色 + 配色：品牌文字色压深 */
+[data-theme='light'][data-accent='ocean'] {
+  --color-brand-600: #1d4ed8;
+  --color-brand-500: #2563eb;
+  --color-brand-400: #2563eb;
+  --color-brand-300: #1d4ed8;
+  --color-aqua-400: #0284c7;
+  --color-glow: rgba(37, 99, 235, 0.25);
+}
+[data-theme='light'][data-accent='violet'] {
+  --color-brand-600: #6d28d9;
+  --color-brand-500: #7c3aed;
+  --color-brand-400: #7c3aed;
+  --color-brand-300: #6d28d9;
+  --color-aqua-400: #9333ea;
+  --color-glow: rgba(124, 58, 237, 0.25);
+}
+[data-theme='light'][data-accent='sunset'] {
+  --color-brand-600: #c2410c;
+  --color-brand-500: #ea580c;
+  --color-brand-400: #ea580c;
+  --color-brand-300: #c2410c;
+  --color-aqua-400: #d97706;
+  --color-glow: rgba(234, 88, 12, 0.25);
+}
+[data-theme='light'][data-accent='sakura'] {
+  --color-brand-600: #be185d;
+  --color-brand-500: #db2777;
+  --color-brand-400: #db2777;
+  --color-brand-300: #be185d;
+  --color-aqua-400: #c026d3;
+  --color-glow: rgba(219, 39, 119, 0.25);
+}
+[data-theme='light'][data-accent='emerald'] {
+  --color-brand-600: #047857;
+  --color-brand-500: #059669;
+  --color-brand-400: #059669;
+  --color-brand-300: #047857;
+  --color-aqua-400: #0d9488;
+  --color-glow: rgba(5, 150, 105, 0.25);
+}
+
+/* 品牌渐变 */
+.bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--color-brand-600), var(--color-brand-500) 55%, var(--color-aqua-400));
+}
+.bg-brand-gradient-soft {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-brand-500) 14%, transparent),
+    color-mix(in srgb, var(--color-aqua-400) 10%, transparent)
+  );
+}
+.text-gradient {
+  background-image: linear-gradient(120deg, var(--color-brand-400), var(--color-aqua-400) 80%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-ink-900);
+  color: var(--color-ink-100);
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-brand-500) 30%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-600);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input,
+textarea,
+select {
+  outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-ink-500);
+}
+
+/* 日期时间控件图标在深色下的可见性 */
+input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+[data-theme='light'] input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+/* iOS 质感：通用卡面阴影与发丝描边 */
+.card-hairline {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.03) inset,
+    0 8px 24px -12px rgba(0, 0, 0, 0.5);
+}
+[data-theme='light'] .card-hairline {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.8) inset,
+    0 6px 20px -12px rgba(0, 0, 0, 0.15);
+}

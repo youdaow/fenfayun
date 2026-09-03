@@ -1,0 +1,33 @@
+# Nginx 反向代理配置示例（生产环境建议配 HTTPS）
+#
+# 用法：
+# 1. 把下面内容保存为 /etc/nginx/sites-available/vd-relay
+# 2. 替换 your-domain.com 为你的域名（或去掉域名直接用 IP + 自签证书）
+# 3. ln -s /etc/nginx/sites-available/vd-relay /etc/nginx/sites-enabled/
+# 4. 用 certbot 申请免费证书：certbot --nginx -d your-domain.com
+# 5. nginx -t && systemctl reload nginx
+
+server {
+    listen 80;
+    server_name your-domain.com;   # 改成你的域名
+
+    # 视频上传最大 2GB
+    client_max_body_size 2048m;
+    client_body_timeout 600s;
+
+    location / {
+        proxy_pass http://127.0.0.1:3880;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 上传/下载超时拉长
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_request_buffering off;   # 视频上传不缓存到磁盘再转发
+    }
+}
+
+# 配置 HTTPS 后（certbot 自动生成下面这段），工具里服务器地址改成 https://your-domain.com

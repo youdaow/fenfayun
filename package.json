@@ -1,0 +1,75 @@
+{
+  "name": "video-distributor",
+  "version": "0.1.0",
+  "description": "分发云 · 多平台视频分发工具：抖音 / 快手 / B站 / 小红书 / 视频号，多账号、定时发布、素材库、数据回看",
+  "main": "./out/main/index.js",
+  "author": "WorkBuddy",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.node.json",
+    "build:worker": "esbuild src/worker/index.ts --bundle --platform=node --outfile=out/worker/index.js --format=cjs --external:playwright-core",
+    "dev": "npm run build:worker && electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "npm run build:worker && electron-vite build",
+    "dist": "npm run build && electron-builder --win",
+    "postinstall": "electron-rebuild -f -w better-sqlite3 || echo skip-rebuild"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "^4.0.0",
+    "@types/qrcode": "^1.5.6",
+    "better-sqlite3": "^11.10.0",
+    "playwright-core": "^1.50.1",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.4.0",
+    "electron-builder": "^25.1.8",
+    "electron-rebuild": "^3.2.9",
+    "electron-vite": "^2.3.0",
+    "esbuild": "^0.24.2",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.workbuddy.fenfayun",
+    "productName": "分发云",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "build/icon.*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "分发云"
+    }
+  }
+}
