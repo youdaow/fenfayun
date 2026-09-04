@@ -8,6 +8,14 @@ Dailymotion / Rumble / LinkedIn / Pinterest）。
 多账号、定时发布、素材库、发布记录，以及**作品数据深度分析**（播放 / 点赞 / 评论 / 转发 / 收藏 / 涨粉）。
 全部数据保存在本地。
 
+## 界面预览
+
+| 深色 | 浅色 | 配色方案 |
+| --- | --- | --- |
+| ![深色](docs/screenshot-dark.png) | ![浅色](docs/screenshot-light.png) | ![樱花粉](docs/screenshot-sakura.png) |
+
+深浅色 + 6 套点缀配色（蓝绿 / 海洋蓝 / 暗夜紫 / 日落橙 / 樱花粉 / 翡翠绿）自由组合，另含启动密码锁。
+
 ## 技术栈
 
 | 层 | 选型 | 说明 |
