@@ -141,6 +141,13 @@ export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { text: string; tone: 'default' | 'blue' | 'green' | 'red' | 'amber' }> = {
     pending: { text: '等待中', tone: 'default' },
     running: { text: '进行中', tone: 'blue' },
+    waiting: { text: '等待重试', tone: 'amber' },
+    'waiting-captcha': { text: '等待验证', tone: 'amber' },
+    'waiting-manual': { text: '等待手动发布', tone: 'amber' },
+    uploading: { text: '上传中', tone: 'blue' },
+    filling: { text: '填写中', tone: 'blue' },
+    publishing: { text: '提交中', tone: 'blue' },
+    launching: { text: '启动浏览器', tone: 'blue' },
     success: { text: '成功', tone: 'green' },
     failed: { text: '失败', tone: 'red' },
     canceled: { text: '已取消', tone: 'amber' },

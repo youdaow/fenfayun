@@ -34,7 +34,7 @@ async function handlePublish(msg: Extract<WorkerCommand, { type: 'publish' }>): 
       percent: 3
     })
 
-    ctx = await launchContext({ profileDir: msg.profileDir })
+    ctx = await launchContext({ profileDir: msg.profileDir, proxy: msg.proxy })
     const page = ctx.pages()[0] ?? (await ctx.newPage())
 
     const state = await adapter.checkLogin(page)
@@ -64,6 +64,17 @@ async function handlePublish(msg: Extract<WorkerCommand, { type: 'publish' }>): 
       })
     })
 
+    // 失败时抓一张现场截图（诊断用），截图失败不影响主流程
+    let screenshot: string | undefined
+    if (!result.success && msg.errShotPath) {
+      try {
+        await page.screenshot({ path: msg.errShotPath, fullPage: false }).catch(() => {})
+        screenshot = msg.errShotPath
+      } catch {
+        /* ignore */
+      }
+    }
+
     send({
       type: 'result',
       taskId: msg.taskId,
@@ -73,9 +84,22 @@ async function handlePublish(msg: Extract<WorkerCommand, { type: 'publish' }>): 
       success: result.success,
       url: result.url,
       error: result.error,
-      duration: result.duration
+      duration: result.duration,
+      screenshot
     })
   } catch (err) {
+    let screenshot: string | undefined
+    if (msg.errShotPath && ctx) {
+      try {
+        const p = ctx.pages()[ctx.pages().length - 1]
+        if (p) {
+          await p.screenshot({ path: msg.errShotPath }).catch(() => {})
+          screenshot = msg.errShotPath
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     send({
       type: 'result',
       taskId: msg.taskId,
@@ -83,7 +107,8 @@ async function handlePublish(msg: Extract<WorkerCommand, { type: 'publish' }>): 
       platform: msg.platform,
       accountId: 0,
       success: false,
-      error: err instanceof Error ? err.message : String(err)
+      error: err instanceof Error ? err.message : String(err),
+      screenshot
     })
   } finally {
     await closeContext(ctx)

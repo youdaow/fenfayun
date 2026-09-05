@@ -153,6 +153,14 @@ export default function History() {
                       ) : (
                         <span className="text-ink-500">-</span>
                       )}
+                      {l.status === 'failed' && l.screenshot && (
+                        <button
+                          className="ml-3 text-amber-400 hover:underline"
+                          onClick={() => void api().openFile(l.screenshot!)}
+                        >
+                          截图
+                        </button>
+                      )}
                       {['failed', 'canceled'].includes(l.status) && (
                         <button
                           className="ml-3 text-amber-400 hover:underline"

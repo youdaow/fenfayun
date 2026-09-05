@@ -1,7 +1,7 @@
 import { ipcMain, dialog } from 'electron'
 import { writeFileSync } from 'fs'
 import * as db from '../db'
-import { enqueueTask, cancelAll, isBusy, enqueueLog } from '../task-runner'
+import { enqueueTask, cancelAll, isBusy, enqueueLog, cancelTask } from '../task-runner'
 import { normalizeTime } from '../scheduler'
 import { PLATFORM_MAP } from '../../shared/platforms'
 import type { TaskInput } from '../../shared/types'
@@ -22,18 +22,36 @@ export function registerTaskIPC(notify: () => void): void {
     }
 
     const task = db.createTask(normalized)
-    // 立即发布：直接入队开始跑；定时任务交给调度器扫描
-    if (task.publish_mode === 'now') enqueueTask(task)
+    // 草稿只存不发；立即发布直接入队；定时任务交给调度器扫描
+    if (!input.asDraft && task.publish_mode === 'now') enqueueTask(task)
     notify()
     return task
+  })
+
+  /** 编辑任务（草稿）字段 */
+  ipcMain.handle('task:update', (_e, id: number, patch: Parameters<typeof db.updateTask>[1]) => {
+    const t = db.updateTask(id, patch)
+    notify()
+    return t
+  })
+
+  /** 草稿直接开始发布 */
+  ipcMain.handle('task:startDraft', (_e, id: number) => {
+    const t = db.getTask(id)
+    if (!t) throw new Error('任务不存在')
+    if (t.status !== 'draft') throw new Error('仅草稿可以启动')
+    const normalized = t.publish_mode === 'scheduled' ? t : { ...t, publish_mode: 'now' as const }
+    enqueueTask(normalized)
+    notify()
+    return true
   })
 
   ipcMain.handle('task:runNow', (_e, id: number) => {
     const t = db.getTask(id)
     if (!t) throw new Error('任务不存在')
     // 清掉旧的失败日志再重跑
-    for (const l of db.listPublishLogs({ limit: 1000 })) {
-      if (l.task_id === id && (l.status === 'failed' || l.status === 'canceled')) {
+    for (const l of db.listLogsByTask(id)) {
+      if (l.status === 'failed' || l.status === 'canceled') {
         db.updatePublishLog(l.id, { status: 'pending', error: null, message: null })
       }
     }
@@ -44,6 +62,13 @@ export function registerTaskIPC(notify: () => void): void {
 
   ipcMain.handle('task:remove', (_e, id: number) => {
     db.removeTask(id)
+    notify()
+    return true
+  })
+
+  /** 取消单个任务（不影响其他在跑任务） */
+  ipcMain.handle('task:cancelOne', (_e, id: number) => {
+    cancelTask(id)
     notify()
     return true
   })

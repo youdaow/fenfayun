@@ -26,6 +26,25 @@ export function registerFileIPC(): void {
     return res.filePaths[0]
   })
 
+  /** 选择可执行文件（浏览器路径） */
+  ipcMain.handle('file:selectExe', async () => {
+    const res = await dialog.showOpenDialog({
+      title: '选择浏览器可执行文件',
+      filters: [{ name: '可执行文件', extensions: ['exe'] }],
+      properties: ['openFile']
+    })
+    if (res.canceled || !res.filePaths.length) return null
+    return res.filePaths[0]
+  })
+
+  /** 用系统默认程序打开任意文件（如失败截图） */
+  ipcMain.handle('file:openFile', async (_e, p: string) => {
+    if (!existsSync(p)) return false
+    const { shell } = await import('electron')
+    await shell.openPath(p)
+    return true
+  })
+
   ipcMain.handle('file:stat', (_e, p: string) => {
     if (!existsSync(p)) return null
     const st = statSync(p)

@@ -13,6 +13,8 @@ export interface AccountRow {
   last_check: string | null
   avatar: string | null
   fans: string | null
+  /** 该账号专属代理（空则用全局代理设置） */
+  proxy: string | null
   created_at: string
   updated_at: string
 }
@@ -47,8 +49,17 @@ export interface TaskRow {
   scheduled_at: string | null
   targets: string
   status: TaskStatus
+  /** 1 = 尽量交给平台侧定时发布（App 关着也能发） */
+  platform_schedule: number
+  /** 按平台覆盖文案 JSON：{ [platformId]: { title?, description?, tags? } } */
+  overrides: string | null
   created_at: string
   completed_at: string | null
+}
+
+/** 每平台的文案覆盖 */
+export interface PlatformOverrides {
+  [platformId: string]: { title?: string; description?: string; tags?: string[] }
 }
 
 export type LogStatus = 'pending' | 'running' | 'success' | 'failed' | 'canceled'
@@ -63,6 +74,10 @@ export interface PublishLogRow {
   result_url: string | null
   error: string | null
   duration_ms: number | null
+  /** 失败现场截图的本地路径 */
+  screenshot: string | null
+  /** 第几次尝试（自动重试计数） */
+  attempt: number
   started_at: string | null
   finished_at: string | null
   task_title?: string
@@ -81,6 +96,12 @@ export interface TaskInput {
   publishMode: 'now' | 'scheduled'
   scheduledAt?: string | null
   targets: TaskTarget[]
+  /** 尽量使用平台侧定时发布 */
+  platformSchedule?: boolean
+  /** 按平台覆盖文案 */
+  overrides?: PlatformOverrides
+  /** 保存为草稿（不立即入队） */
+  asDraft?: boolean
 }
 
 export interface ProgressPayload {
@@ -88,7 +109,16 @@ export interface ProgressPayload {
   logId?: number
   platform: PlatformId
   accountId: number
-  status: 'waiting' | 'launching' | 'uploading' | 'filling' | 'publishing' | 'success' | 'failed'
+  status:
+    | 'waiting'
+    | 'launching'
+    | 'uploading'
+    | 'filling'
+    | 'publishing'
+    | 'waiting-captcha'
+    | 'waiting-manual'
+    | 'success'
+    | 'failed'
   message?: string
   percent?: number
   resultUrl?: string
@@ -105,6 +135,10 @@ export type WorkerCommand =
       platform: PlatformId
       profileDir: string
       options: PublishOptions
+      /** 失败现场截图写到这里（绝对路径，空则不截图） */
+      errShotPath?: string
+      /** 代理服务器（http://host:port / socks5://host:port，空则不用） */
+      proxy?: string
     }
   | {
       type: 'login'
@@ -140,6 +174,7 @@ export type WorkerEvent =
       url?: string
       error?: string
       duration?: number
+      screenshot?: string
     }
   | {
       type: 'loginStatus'

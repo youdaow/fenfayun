@@ -1,6 +1,15 @@
 import type { Page } from 'playwright-core'
 import type { PlatformAdapter, LoginState, PublishOptions, PublishOutcome } from './types'
-import { delay, fillFirst, setFile, clickFirst, withTimeout, settle, scrapeProfile } from '../humanize'
+import {
+  delay,
+  fillFirst,
+  setFile,
+  clickFirst,
+  withTimeout,
+  settle,
+  scrapeProfile,
+  waitCaptchaCleared
+} from '../humanize'
 
 const HOME = 'https://creator.douyin.com/creator-micro/content/manage'
 const UPLOAD = 'https://creator.douyin.com/creator-micro/content/upload'
@@ -129,6 +138,9 @@ export const douyin: PlatformAdapter = {
         'button:has-text("定时发布")'
       ])
       if (!posted) throw new Error('未找到发布按钮')
+
+      // 平台常在提交时弹滑块/拼图：等用户手动通过后再等成功文案
+      await waitCaptchaCleared(page, onProgress, 180000, 92)
 
       await withTimeout(
         page

@@ -13,9 +13,9 @@ export function registerAccountIPC(notify: () => void): void {
 
   ipcMain.handle(
     'account:add',
-    (_e, platform: PlatformId, name: string, remark = '', group = '') => {
+    (_e, platform: PlatformId, name: string, remark = '', group = '', proxy = '') => {
       // 先插入占位，拿到自增 id 后再回填 profile 目录
-      const tmp = db.createAccount(platform, name, `pending_${Date.now()}_${Math.random()}`, remark, group)
+      const tmp = db.createAccount(platform, name, `pending_${Date.now()}_${Math.random()}`, remark, group, proxy)
       db.setAccountProfileDir(tmp.id, getProfileDir(tmp.id))
       notify()
       return db.getAccount(tmp.id)
@@ -24,7 +24,7 @@ export function registerAccountIPC(notify: () => void): void {
 
   ipcMain.handle(
     'account:update',
-    (_e, id: number, patch: { name?: string; remark?: string; group_name?: string }) => {
+    (_e, id: number, patch: { name?: string; remark?: string; group_name?: string; proxy?: string }) => {
       db.updateAccount(id, patch)
       notify()
       return db.getAccount(id)
@@ -112,4 +112,17 @@ async function checkOne(id: number): Promise<boolean> {
 
     handle.send({ type: 'checkLogin', platform: acc.platform, profileDir })
   })
+}
+
+/**
+ * 静默巡检全部账号登录态（headless、串行），返回过期账号名列表。
+ * 供主进程定时任务调用；与 checkAll（用户手动触发）共用 checkOne。
+ */
+export async function checkAllAccountsSilent(): Promise<string[]> {
+  const expired: string[] = []
+  for (const a of db.listAccounts()) {
+    const ok = await checkOne(a.id)
+    if (!ok) expired.push(a.name)
+  }
+  return expired
 }

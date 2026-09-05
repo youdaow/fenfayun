@@ -60,6 +60,8 @@ export interface LaunchConfig {
   profileDir: string
   headless?: boolean
   slowMo?: number
+  /** 代理服务器，如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080 */
+  proxy?: string
 }
 
 export async function launchContext(cfg: LaunchConfig): Promise<BrowserContext> {
@@ -74,6 +76,7 @@ export async function launchContext(cfg: LaunchConfig): Promise<BrowserContext> 
     locale: 'zh-CN',
     timezoneId: 'Asia/Shanghai',
     slowMo: cfg.slowMo ?? 0,
+    proxy: cfg.proxy ? { server: cfg.proxy } : undefined,
     ignoreDefaultArgs: ['--enable-automation'],
     args: [
       '--disable-blink-features=AutomationControlled',

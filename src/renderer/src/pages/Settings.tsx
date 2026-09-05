@@ -7,14 +7,18 @@ import QRCode from 'qrcode'
 type InboxStatus = { running: boolean; port: number; url: string; ip: string }
 
 export default function Settings() {
-  const [info, setInfo] = useState<{ version: string; dataRoot: string; profilesRoot: string } | null>(null)
+  const [info, setInfo] = useState<{ version: string; dataRoot: string; profilesRoot: string; dbPath: string } | null>(null)
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [inbox, setInbox] = useState<InboxStatus | null>(null)
   const [qr, setQr] = useState<string>('')
+  const [pin, setPin] = useState<string>('')
 
   useEffect(() => {
     void api().getAppInfo().then(setInfo)
-    void api().getSettings().then(setSettings)
+    void api().getSettings().then((s) => {
+      setSettings(s)
+      setPin(s['inbox.pin'] ?? '')
+    })
     void api().inboxStatus().then(setInbox)
   }, [])
 
@@ -32,7 +36,8 @@ export default function Settings() {
       const st = await api().inboxStart()
       setInbox(st)
       try {
-        setQr(await QRCode.toDataURL(st.url, { margin: 1, width: 240 }))
+        const url = pin ? `${st.url}/?pin=${encodeURIComponent(pin)}` : st.url
+        setQr(await QRCode.toDataURL(url, { margin: 1, width: 240 }))
       } catch {
         setQr('')
       }
@@ -67,6 +72,39 @@ export default function Settings() {
             <Button variant={inbox?.running ? 'danger' : 'primary'} onClick={toggleInbox}>
               {inbox?.running ? '停止收件箱' : '开启收件箱'}
             </Button>
+            <Field label="上传 PIN" hint="设置后 iPad 需输入 PIN 才能上传；清空则不设防">
+              <div className="flex gap-2">
+                <Input
+                  className="w-32"
+                  value={pin}
+                  maxLength={8}
+                  placeholder="例如 2468"
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                  onBlur={() => void save('inbox.pin', pin)}
+                />
+                {inbox?.running && pin && (
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      const st = await api().inboxStatus()
+                      setInbox(st)
+                      try {
+                        setQr(
+                          await QRCode.toDataURL(`${st.url}/?pin=${encodeURIComponent(pin)}`, {
+                            margin: 1,
+                            width: 240
+                          })
+                        )
+                      } catch {
+                        setQr('')
+                      }
+                    }}
+                  >
+                    重新生成二维码
+                  </Button>
+                )}
+              </div>
+            </Field>
           </div>
 
           <div className="shrink-0 text-center">
@@ -113,7 +151,7 @@ export default function Settings() {
               />
               <Button
                 onClick={async () => {
-                  const p = await api().selectVideo()
+                  const p = await api().selectExe()
                   if (p) {
                     setSettings((s) => ({ ...s, browserPath: p }))
                     await save('browserPath', p)
@@ -126,6 +164,72 @@ export default function Settings() {
             <p className="mt-2 text-[11px] text-ink-400">
               未指定时按 Chrome → Edge → Playwright Chromium 顺序自动探测。
             </p>
+          </Field>
+
+          <Field label="网络代理" hint="发布 TikTok/YouTube 等海外平台通常需要；账号上单独填的优先生效">
+            <Input
+              value={settings['proxy.global'] ?? ''}
+              placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（留空直连）"
+              onChange={(e) => setSettings((s) => ({ ...s, 'proxy.global': e.target.value }))}
+              onBlur={() => void save('proxy.global', settings['proxy.global'] ?? '')}
+            />
+          </Field>
+
+          <Field label="失败自动重试" hint="发布失败后自动重试的次数（退避 30/90/180 秒）">
+            <div className="flex gap-2">
+              {['0', '1', '2', '3'].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => save('autoRetry', n)}
+                  className={`h-9 flex-1 rounded-lg border text-xs transition-colors ${
+                    (settings.autoRetry ?? '1') === n
+                      ? 'border-brand-500 bg-brand-500/10 text-ink-100'
+                      : 'border-ink-600 text-ink-400 hover:border-ink-500'
+                  }`}
+                >
+                  {n} 次
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label="窗口与自启">
+            <div className="space-y-2 text-xs text-ink-300">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 accent-brand-500"
+                  checked={(settings.closeToTray ?? '1') === '1'}
+                  onChange={async (e) => {
+                    await save('closeToTray', e.target.checked ? '1' : '0')
+                  }}
+                />
+                点关闭窗口时最小化到系统托盘（保持定时任务运行）
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 accent-brand-500"
+                  checked={(settings.minimizeToTray ?? '0') === '1'}
+                  onChange={async (e) => {
+                    await save('minimizeToTray', e.target.checked ? '1' : '0')
+                  }}
+                />
+                最小化时也收进托盘
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 accent-brand-500"
+                  checked={(settings.launchAtLogin ?? '0') === '1'}
+                  onChange={async (e) => {
+                    const ok = await api().setLaunchAtLogin(e.target.checked)
+                    if (ok) await save('launchAtLogin', e.target.checked ? '1' : '0')
+                  }}
+                />
+                开机自动启动分发云
+              </label>
+            </div>
           </Field>
         </div>
       </Card>
@@ -144,11 +248,39 @@ export default function Settings() {
           <Row label="应用版本" value={info?.version ?? '-'} />
           <Row label="数据目录" value={info?.dataRoot ?? '-'} />
           <Row label="账号 Profile 目录" value={info?.profilesRoot ?? '-'} />
-          <div className="pt-2">
+          <Row label="数据库文件" value={info?.dbPath ?? '-'} />
+          <div className="flex flex-wrap gap-2 pt-2">
             <Button size="sm" onClick={() => api().openDataDir()}>
               打开数据目录
             </Button>
+            <Button
+              size="sm"
+              onClick={async () => {
+                const p = await api().backupDb()
+                if (p) alert('已备份到：\n' + p)
+              }}
+            >
+              备份数据库
+            </Button>
+            <Button
+              size="sm"
+              onClick={async () => {
+                if (!confirm('恢复会用备份文件整体替换当前数据（账号/任务/记录），并自动先备份现状。继续？')) return
+                try {
+                  const p = await api().restoreDb()
+                  if (p) alert('已从备份恢复：\n' + p + '\n建议立即重启应用。')
+                } catch (e) {
+                  alert('恢复失败：' + ((e as Error).message ?? e))
+                }
+              }}
+            >
+              从备份恢复
+            </Button>
           </div>
+          <p className="text-[11px] leading-relaxed text-ink-400">
+            备份包含账号列表、任务、发布记录与数据录入；浏览器登录态在各账号 Profile 目录中，
+            换机时请连同 Profile 目录一起拷贝。
+          </p>
         </div>
       </Card>
 

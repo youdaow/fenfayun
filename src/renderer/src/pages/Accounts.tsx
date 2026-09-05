@@ -18,7 +18,9 @@ export default function Accounts() {
   const [group, setGroup] = useState('all')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<Record<number, boolean>>({})
-  const [form, setForm] = useState({ platform: 'douyin', name: '', remark: '', group: '' })
+  const [form, setForm] = useState({ platform: 'douyin', name: '', remark: '', group: '', proxy: '' })
+  const [editAcc, setEditAcc] = useState<AccountRow | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', group: '', remark: '', proxy: '' })
   const [editFans, setEditFans] = useState<AccountRow | null>(null)
   const [fansInput, setFansInput] = useState('')
 
@@ -40,9 +42,22 @@ export default function Accounts() {
 
   const add = async () => {
     if (!form.name.trim()) return alert('请填写账号备注名')
-    await api().addAccount(form.platform, form.name.trim(), form.remark, form.group)
-    setForm({ platform: form.platform, name: '', remark: '', group: '' })
+    await api().addAccount(form.platform, form.name.trim(), form.remark, form.group, form.proxy.trim())
+    setForm({ platform: form.platform, name: '', remark: '', group: '', proxy: '' })
     setOpen(false)
+    void load()
+  }
+
+  const saveEdit = async () => {
+    if (!editAcc) return
+    if (!editForm.name.trim()) return alert('请填写账号备注名')
+    await api().updateAccount(editAcc.id, {
+      name: editForm.name.trim(),
+      group_name: editForm.group,
+      remark: editForm.remark,
+      proxy: editForm.proxy.trim()
+    })
+    setEditAcc(null)
     void load()
   }
 
@@ -214,6 +229,21 @@ export default function Accounts() {
                   <Button
                     size="sm"
                     variant="ghost"
+                    onClick={() => {
+                      setEditAcc(a)
+                      setEditForm({
+                        name: a.name,
+                        group: a.group_name ?? '',
+                        remark: a.remark ?? '',
+                        proxy: a.proxy ?? ''
+                      })
+                    }}
+                  >
+                    编辑
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     className="ml-auto text-red-400 hover:bg-red-500/10"
                     onClick={async () => {
                       if (confirm(`确定删除账号「${a.name}」？登录态也会一并清除。`)) {
@@ -308,10 +338,54 @@ export default function Accounts() {
             />
           </Field>
 
+          <Field label="代理" hint="选填；该账号发布/登录时走此代理，留空用全局设置">
+            <Input
+              value={form.proxy}
+              onChange={(e) => setForm((f) => ({ ...f, proxy: e.target.value }))}
+              placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+            />
+          </Field>
+
           <p className="rounded-lg bg-ink-800 p-3 text-[11px] leading-relaxed text-ink-400">
             添加后点「登录」，会打开一个独立的浏览器窗口（每个账号独立 profile，登录态长期保存）。
             扫码或手机号登录完成后，直接关闭窗口，随后点「检测」确认状态。
           </p>
+        </div>
+      </Modal>
+
+      {/* 编辑账号 */}
+      <Modal
+        open={!!editAcc}
+        title={'编辑账号 · ' + (editAcc?.name ?? '')}
+        onClose={() => setEditAcc(null)}
+        footer={
+          <>
+            <Button onClick={() => setEditAcc(null)}>取消</Button>
+            <Button variant="primary" onClick={() => void saveEdit()}>
+              保存
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="账号备注名">
+              <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+            </Field>
+            <Field label="分组" hint="选填">
+              <Input value={editForm.group} onChange={(e) => setEditForm((f) => ({ ...f, group: e.target.value }))} />
+            </Field>
+          </div>
+          <Field label="备注" hint="选填">
+            <Input value={editForm.remark} onChange={(e) => setEditForm((f) => ({ ...f, remark: e.target.value }))} />
+          </Field>
+          <Field label="代理" hint="该账号专属代理，留空用全局设置">
+            <Input
+              value={editForm.proxy}
+              placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+              onChange={(e) => setEditForm((f) => ({ ...f, proxy: e.target.value }))}
+            />
+          </Field>
         </div>
       </Modal>
 

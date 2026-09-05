@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AccountRow,
   AnalyticsSummary,
@@ -15,8 +15,8 @@ import type {
 const api = {
   /* 账号 */
   getAccounts: () => ipcRenderer.invoke('account:list') as Promise<AccountRow[]>,
-  addAccount: (platform: string, name: string, remark?: string, group?: string) =>
-    ipcRenderer.invoke('account:add', platform, name, remark, group) as Promise<AccountRow>,
+  addAccount: (platform: string, name: string, remark?: string, group?: string, proxy?: string) =>
+    ipcRenderer.invoke('account:add', platform, name, remark, group, proxy) as Promise<AccountRow>,
   updateAccount: (id: number, patch: Partial<AccountRow>) =>
     ipcRenderer.invoke('account:update', id, patch) as Promise<AccountRow>,
   removeAccount: (id: number) => ipcRenderer.invoke('account:remove', id) as Promise<boolean>,
@@ -30,6 +30,10 @@ const api = {
     ipcRenderer.invoke('material:list', keyword ?? '') as Promise<MaterialRow[]>,
   pickMaterial: (copyToApp?: boolean) =>
     ipcRenderer.invoke('material:pick', copyToApp ?? false) as Promise<MaterialRow[]>,
+  addMaterialPaths: (paths: string[], copyToApp?: boolean) =>
+    ipcRenderer.invoke('material:addPaths', paths, copyToApp ?? false) as Promise<MaterialRow[]>,
+  removeMaterials: (ids: number[]) =>
+    ipcRenderer.invoke('material:removeMany', ids) as Promise<boolean>,
   updateMaterial: (id: number, patch: Record<string, unknown>) =>
     ipcRenderer.invoke('material:update', id, patch) as Promise<boolean>,
   removeMaterial: (id: number) => ipcRenderer.invoke('material:remove', id) as Promise<boolean>,
@@ -39,8 +43,12 @@ const api = {
   getTasks: (q?: Record<string, unknown>) =>
     ipcRenderer.invoke('task:list', q ?? {}) as Promise<TaskRow[]>,
   createTask: (input: TaskInput) => ipcRenderer.invoke('task:create', input) as Promise<TaskRow>,
+  updateTask: (id: number, patch: Record<string, unknown>) =>
+    ipcRenderer.invoke('task:update', id, patch) as Promise<TaskRow>,
+  startDraft: (id: number) => ipcRenderer.invoke('task:startDraft', id) as Promise<boolean>,
   runTaskNow: (id: number) => ipcRenderer.invoke('task:runNow', id) as Promise<boolean>,
   removeTask: (id: number) => ipcRenderer.invoke('task:remove', id) as Promise<boolean>,
+  cancelTask: (id: number) => ipcRenderer.invoke('task:cancelOne', id) as Promise<boolean>,
   cancelTasks: () => ipcRenderer.invoke('task:cancel') as Promise<boolean>,
   isBusy: () => ipcRenderer.invoke('task:busy') as Promise<boolean>,
 
@@ -55,6 +63,8 @@ const api = {
   /* 文件 */
   selectVideo: () => ipcRenderer.invoke('file:selectVideo') as Promise<string | null>,
   selectImage: () => ipcRenderer.invoke('file:selectImage') as Promise<string | null>,
+  selectExe: () => ipcRenderer.invoke('file:selectExe') as Promise<string | null>,
+  openFile: (p: string) => ipcRenderer.invoke('file:openFile', p) as Promise<boolean>,
   statFile: (p: string) =>
     ipcRenderer.invoke('file:stat', p) as Promise<{
       path: string
@@ -74,8 +84,14 @@ const api = {
       version: string
       dataRoot: string
       profilesRoot: string
+      dbPath: string
     }>,
   openDataDir: () => ipcRenderer.invoke('app:openDataDir') as Promise<boolean>,
+  setLaunchAtLogin: (enabled: boolean) =>
+    ipcRenderer.invoke('app:setLaunchAtLogin', enabled) as Promise<boolean>,
+  getLaunchAtLogin: () => ipcRenderer.invoke('app:getLaunchAtLogin') as Promise<boolean>,
+  backupDb: () => ipcRenderer.invoke('app:backupDb') as Promise<string | null>,
+  restoreDb: () => ipcRenderer.invoke('app:restoreDb') as Promise<string | null>,
 
   /* 数据分析 */
   recordMetric: (input: WorkMetricInput) =>
@@ -144,5 +160,14 @@ const api = {
 }
 
 contextBridge.exposeInMainWorld('api', api)
+
+/** Electron 32+ 移除了 File.path，拖拽取绝对路径要用 webUtils */
+contextBridge.exposeInMainWorld('getPathForFile', (file: File) => {
+  try {
+    return webUtils.getPathForFile(file)
+  } catch {
+    return ''
+  }
+})
 
 export type API = typeof api

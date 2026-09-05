@@ -45,8 +45,15 @@ export function startInbox(onFile: (name: string) => void): InboxStatus {
   const mediaRoot = getMediaRoot()
 
   server = createServer((req, res) => {
-    // 首页 / 上传页
+    // 首页 / 上传页（?pin= 正确才给上传页，否则先要 PIN）
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
+      const q = new URL(req.url ?? '/', 'http://x').searchParams
+      const pin = db.getSetting('inbox.pin', '')
+      if (pin && q.get('pin') !== pin) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        res.end(renderPinPage())
+        return
+      }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       res.end(renderUploadPage())
       return
@@ -60,7 +67,14 @@ export function startInbox(onFile: (name: string) => void): InboxStatus {
     }
 
     // 视频上传
-    if (req.method === 'POST' && req.url === '/upload') {
+    if (req.method === 'POST' && req.url && req.url.startsWith('/upload')) {
+      const q = new URL(req.url, 'http://x').searchParams
+      const pin = db.getSetting('inbox.pin', '')
+      if (pin && q.get('pin') !== pin) {
+        res.writeHead(401, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'PIN 不正确' }))
+        return
+      }
       handleUpload(req, res, mediaRoot)
       return
     }
@@ -102,7 +116,11 @@ export function currentStatus(): InboxStatus {
   }
 }
 
-/** 极简 multipart 解析：只处理单个文件字段，字段名 file */
+/**
+ * 流式 multipart 上传：边收边写盘（不再整包缓存，大文件不撑爆内存）。
+ * 手写解析：找到 part 头部结束标记后，把剩余字节流式写入目标文件，
+ * 遇到 boundary 结束序列即停。字段名固定 file。
+ */
 function handleUpload(
   req: import('http').IncomingMessage,
   res: import('http').ServerResponse,
@@ -115,73 +133,147 @@ function handleUpload(
     res.end(JSON.stringify({ ok: false, error: '缺少 boundary' }))
     return
   }
-  const boundary = m[1]
-  const chunks: Buffer[] = []
-  req.on('data', (c) => chunks.push(c))
-  req.on('end', () => {
-    try {
-      const buf = Buffer.concat(chunks)
-      const { filename, filedata } = parseMultipart(buf, boundary)
-      if (!filedata || !filename) {
-        res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: false, error: '未收到文件' }))
-        return
-      }
+  const boundary = Buffer.from('\r\n--' + m[1].replace(/^"|"$/g, ''))
+  const MAX_BYTES = 2 * 1024 * 1024 * 1024
 
-      const safeName = basename(filename).replace(/[\\/:*?"<>|]/g, '_')
-      const ext = extname(safeName).toLowerCase()
-      const target = join(mediaRoot, `${Date.now()}_${randomUUID().slice(0, 6)}${ext}`)
-      createWriteStream(target).end(filedata, () => {
-        try {
-          const existing = db.listMaterials().find((mt) => mt.path === target)
-          if (!existing) {
-            db.createMaterial({
-              name: safeName,
-              path: target,
-              size: filedata.length,
-              duration: ext === '.mp4' ? getMp4Duration(target) : null,
-              coverPath: null
-            })
-          }
-          onUpload?.(safeName)
-          res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: true, name: safeName }))
-        } catch (e) {
-          res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: false, error: String(e) }))
-        }
-      })
+  let filename = ''
+  let target = ''
+  let out: import('fs').WriteStream | null = null
+  let headerBuf = Buffer.alloc(0)
+  let inHeaders = true
+  let total = 0
+  let tail = Buffer.alloc(0) // 保留末尾可能的 boundary 前缀
+  let done = false
+
+  const finish = (ok: boolean, errText?: string): void => {
+    if (done) return
+    done = true
+    if (out) {
+      try { out.end() } catch { /* ignore */ }
+    }
+    if (!ok) {
+      if (target && existsSync(target)) {
+        try { require('fs').unlinkSync(target) } catch { /* ignore */ }
+      }
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: errText ?? '上传中断' }))
+      return
+    }
+    try {
+      const size = total
+      const safeName = filename || 'video.mp4'
+      void size
+      const existing = db.listMaterials().find((mt) => mt.path === target)
+      if (!existing) {
+        const ext = extname(target).toLowerCase()
+        db.createMaterial({
+          name: safeName,
+          path: target,
+          size,
+          duration: ext === '.mp4' ? getMp4Duration(target) : null,
+          coverPath: null
+        })
+      }
+      onUpload?.(safeName)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, name: safeName }))
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: String(e) }))
     }
+  }
+
+  req.on('data', (chunk: Buffer) => {
+    if (done) return
+    total += chunk.length
+    if (total > MAX_BYTES) {
+      req.destroy()
+      finish(false, '文件超过 2GB')
+      return
+    }
+    if (inHeaders) {
+      headerBuf = Buffer.concat([headerBuf, chunk])
+      const headEnd = headerBuf.indexOf('\r\n\r\n')
+      if (headEnd === -1) {
+        if (headerBuf.length > 64 * 1024) {
+          req.destroy()
+          finish(false, '请求头异常')
+        }
+        return
+      }
+      const header = headerBuf.subarray(0, headEnd).toString('utf8')
+      const fnMatch = header.match(/filename="([^"]*)"/)
+      const rawName = fnMatch ? fnMatch[1] : 'video.mp4'
+      filename = basename(rawName).replace(/[\\/:*?"<>|]/g, '_')
+      const ext = extname(filename).toLowerCase() || '.mp4'
+      const { randomUUID } = require('crypto') as typeof import('crypto')
+      target = join(mediaRoot, `${Date.now()}_${randomUUID().slice(0, 6)}${ext}`)
+      const { createWriteStream: cws } = require('fs') as typeof import('fs')
+      out = cws(target)
+      out.on('error', () => finish(false, '写入失败'))
+      const bodyStart = headEnd + 4
+      chunk = headerBuf.subarray(bodyStart)
+      headerBuf = Buffer.alloc(0)
+      inHeaders = false
+    }
+    // 检测 boundary：保留 boundary.length+8 字节的尾巴下次判断
+    const buf = tail.length ? Buffer.concat([tail, chunk]) : chunk
+    const idx = buf.indexOf(boundary)
+    if (idx !== -1) {
+      out?.write(buf.subarray(0, idx))
+      finish(true)
+      req.pause()
+      return
+    }
+    const safeLen = Math.max(0, buf.length - boundary.length - 8)
+    if (safeLen > 0) {
+      out?.write(buf.subarray(0, safeLen))
+      tail = Buffer.from(buf.subarray(safeLen))
+    } else {
+      tail = Buffer.from(buf)
+    }
   })
+
+  req.on('end', () => {
+    if (done) return
+    // 没有显式 boundary（截断式）：把 tail 写掉收尾
+    if (tail.length && out) out.write(tail)
+    finish(!!target)
+  })
+  req.on('error', () => finish(false, '网络错误'))
 }
 
-function parseMultipart(buf: Buffer, boundary: string): { filename: string; filedata: Buffer } {
-  const delim = Buffer.from(`--${boundary}`)
-  let filename = ''
-  let filedata: Buffer = Buffer.alloc(0)
-
-  // 按 boundary 切分
-  let start = buf.indexOf(delim)
-  while (start !== -1) {
-    const headerEnd = buf.indexOf('\r\n\r\n', start)
-    if (headerEnd === -1) break
-    const header = buf.slice(start, headerEnd).toString('utf8')
-    const next = buf.indexOf(delim, headerEnd)
-    const bodyStart = headerEnd + 4
-    const bodyEnd = next === -1 ? buf.length - 2 : next - 2 // 去掉尾部 \r\n
-    const body = buf.slice(bodyStart, Math.max(bodyStart, bodyEnd))
-
-    const fnMatch = header.match(/filename="([^"]*)"/)
-    if (fnMatch) {
-      filename = fnMatch[1]
-      filedata = body
-    }
-    start = next
-  }
-  return { filename, filedata }
+function renderPinPage(): string {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>视频收发件箱 · 输入 PIN</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0f1115; color: #e6e9ef;
+         min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { width: 100%; max-width: 360px; background: #1a1d24; border: 1px solid #232833; border-radius: 20px;
+          padding: 32px 24px; text-align: center; }
+  h1 { font-size: 20px; font-weight: 600; }
+  .sub { color: #6b7488; font-size: 13px; margin-top: 6px; }
+  input { margin-top: 24px; width: 100%; height: 52px; text-align: center; font-size: 24px; letter-spacing: 8px;
+          border-radius: 12px; border: 1px solid #313846; background: #12151b; color: #e6e9ef; outline: none; }
+  input:focus { border-color: #3b82f6; }
+  .btn { margin-top: 16px; width: 100%; height: 48px; border: none; border-radius: 12px; background: #3b82f6;
+         color: #fff; font-size: 16px; font-weight: 600; }
+</style>
+</head>
+<body>
+<form class="card" method="get" action="/">
+  <h1>📥 视频收发件箱</h1>
+  <div class="sub">请输入电脑上显示的 4 位 PIN</div>
+  <input name="pin" inputmode="numeric" maxlength="8" autocomplete="off" autofocus placeholder="••••">
+  <button class="btn" type="submit">进入上传页</button>
+</form>
+</body>
+</html>`
 }
 
 function renderUploadPage(): string {
@@ -242,7 +334,7 @@ function renderUploadPage(): string {
     prog.style.display = 'block';
     progbar.style.width = '0%';
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/upload');
+    xhr.open('POST', '/upload' + location.search);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) progbar.style.width = Math.round(e.loaded / e.total * 100) + '%';
     };

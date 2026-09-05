@@ -1,6 +1,15 @@
 import type { Page } from 'playwright-core'
 import type { PlatformAdapter, LoginState, PublishOutcome } from './types'
-import { delay, fillFirst, setFile, clickFirst, withTimeout, settle, scrapeProfile } from '../humanize'
+import {
+  delay,
+  fillFirst,
+  setFile,
+  clickFirst,
+  withTimeout,
+  settle,
+  scrapeProfile,
+  waitCaptchaCleared
+} from '../humanize'
 
 const HOME = 'https://www.tiktok.com/creator-center'
 const UPLOAD = 'https://www.tiktok.com/creator-center/upload'
@@ -82,6 +91,9 @@ export const tiktok: PlatformAdapter = {
         '[class*="post-btn"]'
       ])
       if (!posted) throw new Error('未找到 Post 按钮')
+
+      // 平台常在提交时弹滑块/拼图：等用户手动通过后再等成功文案
+      await waitCaptchaCleared(page, onProgress, 180000, 92)
 
       await withTimeout(
         page.waitForFunction(

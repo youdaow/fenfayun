@@ -228,6 +228,31 @@ export default function Analytics() {
           <div className="text-xs text-ink-400">
             为「{recordTarget?.title ?? '作品'}」录入最新数据，可多次录入形成时间趋势。
           </div>
+          {recordTarget && (PLATFORM_MAP[recordTarget.platform]?.statsUrl || recordTarget.result_url) && (
+            <div className="flex flex-wrap gap-2">
+              {recordTarget.result_url && (
+                <Button
+                  size="sm"
+                  variant="soft"
+                  onClick={() => api().openExternal(recordTarget.result_url!)}
+                >
+                  打开作品页
+                </Button>
+              )}
+              {PLATFORM_MAP[recordTarget.platform]?.statsUrl && (
+                <Button
+                  size="sm"
+                  variant="soft"
+                  onClick={() =>
+                    api().openExternal(PLATFORM_MAP[recordTarget.platform]!.statsUrl as string)
+                  }
+                >
+                  打开{PLATFORM_MAP[recordTarget.platform]?.name}数据中心
+                </Button>
+              )}
+              <span className="self-center text-[11px] text-ink-500">照后台数字填进来即可</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="播放量"><Input name="plays" type="number" defaultValue={0} /></Field>
             <Field label="点赞"><Input name="likes" type="number" defaultValue={0} /></Field>

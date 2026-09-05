@@ -1,5 +1,7 @@
 import * as db from './db'
 import { enqueueTask } from './task-runner'
+import { PLATFORM_MAP } from '../shared/platforms'
+import type { TaskRow } from '../shared/types'
 
 let timer: NodeJS.Timeout | null = null
 
@@ -11,10 +13,29 @@ export function normalizeTime(input: string): string {
   return `${m[1]} ${m[2]}:${m[3]}:${m[5] ?? '00'}`
 }
 
+/** 该任务的所有目标平台是否都支持平台侧定时（决定是否值得提前入队） */
+function allTargetsSupportSchedule(task: TaskRow): boolean {
+  try {
+    const targets = JSON.parse(task.targets || '[]') as { platform: string }[]
+    return (
+      targets.length > 0 &&
+      targets.every((t) => PLATFORM_MAP[t.platform]?.supportSchedule === true)
+    )
+  } catch {
+    return false
+  }
+}
+
 function sweep(): void {
   try {
-    const due = db.listDueTasks(nowString())
-    for (const t of due) enqueueTask(t)
+    const now = nowString()
+    for (const t of db.listDueTasks(now)) {
+      // 平台侧定时的任务会被 listDueTasks 提前 15 分钟带出：
+      // 只有全部目标平台都支持定时才提前跑，否则等真正到点再由本地定时发
+      const stillFuture = (t.scheduled_at ?? '') > now
+      if (stillFuture && !allTargetsSupportSchedule(t)) continue
+      enqueueTask(t)
+    }
   } catch (err) {
     console.error('[scheduler] sweep error', err)
   }

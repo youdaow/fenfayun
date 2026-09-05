@@ -10,6 +10,7 @@ import Settings from './pages/Settings'
 import { api, cx } from './lib/api'
 import { ThemeToggle, initTheme, applyAccent } from './components/ThemeToggle'
 import { LockScreen } from './components/LockScreen'
+import type { TaskRow } from '../../shared/types'
 
 const NAV = [
   { key: 'dashboard', label: '概览', icon: '📊' },
@@ -25,6 +26,7 @@ const NAV = [
 export default function App() {
   const [page, setPage] = useState('dashboard')
   const [preset, setPreset] = useState<{ path: string; name: string } | null>(null)
+  const [editTask, setEditTask] = useState<TaskRow | null>(null)
   const [busy, setBusy] = useState(false)
   const [gate, setGate] = useState<'loading' | 'locked' | 'open'>('loading')
 
@@ -47,11 +49,19 @@ export default function App() {
 
   const goto = (key: string) => {
     if (key !== 'publish') setPreset(null)
+    if (key !== 'publish') setEditTask(null)
     setPage(key)
   }
 
   const useMaterial = (m: { path: string; name: string }) => {
     setPreset(m)
+    setEditTask(null)
+    setPage('publish')
+  }
+
+  const editDraft = (t: TaskRow) => {
+    setPreset(null)
+    setEditTask(t)
     setPage('publish')
   }
 
@@ -133,8 +143,8 @@ export default function App() {
           {page === 'dashboard' && <Dashboard onNavigate={goto} />}
           {page === 'accounts' && <Accounts />}
           {page === 'materials' && <Materials onUse={useMaterial} />}
-          {page === 'publish' && <Publish preset={preset} />}
-          {page === 'tasks' && <Tasks />}
+          {page === 'publish' && <Publish preset={preset} editTask={editTask} onExitEdit={() => setEditTask(null)} />}
+          {page === 'tasks' && <Tasks onEditDraft={editDraft} />}
           {page === 'history' && <History />}
           {page === 'analytics' && <Analytics />}
           {page === 'settings' && <Settings />}

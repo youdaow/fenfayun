@@ -6,7 +6,7 @@ import { PLATFORM_MAP } from '../../../shared/platforms'
 import { StatusBadge } from './Dashboard'
 import type { ProgressPayload, PublishLogRow, TaskRow } from '../../../shared/types'
 
-export default function Tasks() {
+export default function Tasks({ onEditDraft }: { onEditDraft?: (t: TaskRow) => void }) {
   const [tasks, setTasks] = useState<TaskRow[]>([])
   const [logs, setLogs] = useState<PublishLogRow[]>([])
   const [progress, setProgress] = useState<Record<number, ProgressPayload>>({})
@@ -35,38 +35,45 @@ export default function Tasks() {
     () =>
       filter === 'all'
         ? tasks
-        : tasks.filter((t) => (filter === 'active' ? ['pending', 'running'].includes(t.status) : t.status === filter)),
+        : filter === 'active'
+          ? tasks.filter((t) => ['pending', 'running'].includes(t.status))
+          : tasks.filter((t) => t.status === filter),
     [tasks, filter]
   )
 
   const logsOf = (id: number) => logs.filter((l) => l.task_id === id)
 
   const runningCount = tasks.filter((t) => t.status === 'running').length
+  const draftCount = tasks.filter((t) => t.status === 'draft').length
+
+  const filters: [string, string][] = [
+    ['all', '全部'],
+    ['active', '进行中'],
+    ['draft', '草稿' + (draftCount ? ' (' + draftCount + ')' : '')],
+    ['success', '成功'],
+    ['partial', '部分成功'],
+    ['failed', '失败']
+  ]
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {[
-            ['all', '全部'],
-            ['active', '进行中'],
-            ['success', '成功'],
-            ['partial', '部分成功'],
-            ['failed', '失败']
-          ].map(([k, label]) => (
+          {filters.map(([k, label]) => (
             <button
               key={k}
               onClick={() => setFilter(k)}
-              className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
-                filter === k ? 'bg-brand-600 text-white' : 'bg-ink-800 text-ink-300 hover:bg-ink-700'
-              }`}
+              className={
+                'rounded-lg px-3 py-1.5 text-xs transition-colors ' +
+                (filter === k ? 'bg-brand-600 text-white' : 'bg-ink-800 text-ink-300 hover:bg-ink-700')
+              }
             >
               {label}
             </button>
           ))}
         </div>
         <Button size="sm" variant="danger" disabled={!runningCount} onClick={() => void api().cancelTasks()}>
-          取消进行中的任务
+          取消全部进行中
         </Button>
       </div>
 
@@ -87,19 +94,49 @@ export default function Tasks() {
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium text-ink-100">{t.title}</span>
                       <StatusBadge status={t.status} />
-                      {t.publish_mode === 'scheduled' && (
+                      {t.publish_mode === 'scheduled' && t.status !== 'draft' && (
                         <Badge tone="amber">定时 {shortTime(t.scheduled_at)}</Badge>
+                      )}
+                      {!!t.platform_schedule && t.publish_mode === 'scheduled' && (
+                        <Badge tone="blue">平台侧定时</Badge>
                       )}
                     </div>
                     <div className="mt-1 text-[11px] text-ink-400">
-                      创建于 {shortTime(t.created_at)} · {ls.length} 个目标 ·{' '}
+                      创建于 {shortTime(t.created_at)} · {ls.length || JSON.parse(t.targets || '[]').length} 个目标 ·{' '}
                       {t.video_path.split(/[\\/]/).pop()}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-2">
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    {t.status === 'draft' && (
+                      <>
+                        <Button size="sm" variant="primary" onClick={async () => {
+                          try {
+                            await api().startDraft(t.id)
+                            void load()
+                          } catch (e) {
+                            alert((e as Error).message)
+                          }
+                        }}>
+                          立即发布
+                        </Button>
+                        <Button size="sm" onClick={() => onEditDraft?.(t)}>
+                          编辑草稿
+                        </Button>
+                      </>
+                    )}
                     {['failed', 'partial', 'canceled'].includes(t.status) && (
                       <Button size="sm" onClick={() => void api().runTaskNow(t.id)}>
                         重新发布
+                      </Button>
+                    )}
+                    {['pending', 'running'].includes(t.status) && (
+                      <Button size="sm" variant="ghost" className="text-amber-400" onClick={async () => {
+                        if (confirm('取消该任务？不影响其他进行中的任务')) {
+                          await api().cancelTask(t.id)
+                          void load()
+                        }
+                      }}>
+                        取消
                       </Button>
                     )}
                     <Button size="sm" variant="ghost" onClick={() => api().openInFolder(t.video_path)}>
@@ -130,6 +167,7 @@ export default function Tasks() {
                 <div className="mt-3 space-y-1.5">
                   {ls.map((l) => {
                     const p = progress[l.id]
+                    const status = p && l.status === 'running' ? p.status : l.status
                     return (
                       <div
                         key={l.id}
@@ -140,11 +178,23 @@ export default function Tasks() {
                           {PLATFORM_MAP[l.platform]?.name ?? l.platform}
                         </span>
                         <span className="w-24 shrink-0 truncate text-[11px] text-ink-400">
-                          {l.account_name ?? `#${l.account_id}`}
+                          {l.account_name ?? '#' + l.account_id}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[11px] text-ink-400">
                           {p?.message ?? l.message ?? l.error ?? (l.status === 'pending' ? '排队中…' : '')}
                         </span>
+                        {l.screenshot && l.status === 'failed' && (
+                          <button
+                            className="shrink-0 text-[11px] text-amber-400 hover:text-amber-300"
+                            title="查看失败现场截图"
+                            onClick={() => void api().openFile(l.screenshot!)}
+                          >
+                            截图
+                          </button>
+                        )}
+                        {l.attempt > 1 && (
+                          <Badge tone="amber">第 {l.attempt} 次</Badge>
+                        )}
                         {l.result_url && (
                           <button
                             className="shrink-0 text-[11px] text-brand-400 hover:text-brand-300"
@@ -153,7 +203,7 @@ export default function Tasks() {
                             查看
                           </button>
                         )}
-                        <StatusBadge status={p && l.status === 'running' ? p.status : l.status} />
+                        <StatusBadge status={status} />
                       </div>
                     )
                   })}

@@ -31,6 +31,11 @@ export function getCoverRoot(): string {
   return ensure(join(getDataRoot(), 'covers'))
 }
 
+/** 失败现场截图目录 */
+export function getErrShotRoot(): string {
+  return ensure(join(getDataRoot(), 'errshots'))
+}
+
 export function getDbPath(): string {
   return join(getDataRoot(), 'app.db')
 }

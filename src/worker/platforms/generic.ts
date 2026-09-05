@@ -1,6 +1,16 @@
 import type { Page } from 'playwright-core'
 import type { PlatformAdapter, LoginState, PublishOutcome, ProgressFn } from './types'
-import { delay, fillFirst, setFile, clickFirst, withTimeout, settle, scrapeProfile } from '../humanize'
+import {
+  delay,
+  fillFirst,
+  setFile,
+  clickFirst,
+  withTimeout,
+  settle,
+  scrapeProfile,
+  waitCaptchaCleared,
+  waitForManualPublish
+} from '../humanize'
 import type { PlatformMeta, PlatformId } from '../../shared/platforms'
 
 /**
@@ -152,6 +162,9 @@ export function createGenericAdapter(meta: PlatformMeta): PlatformAdapter {
       const posted = await clickFirst(page, PUBLISH_BTN)
       if (!posted) throw new Error('未找到发布按钮，页面结构可能已改版')
 
+      // 有的平台点发布后弹验证码：等用户手动过
+      await waitCaptchaCleared(page, onProgress, 180000, 92)
+
       // 等待成功提示或跳转
       await withTimeout(
         page.waitForFunction(
@@ -216,13 +229,16 @@ export function createAssistAdapter(meta: PlatformMeta): PlatformAdapter {
         const desc = options.description + (options.tags.length ? `\n${options.tags.map((t) => `#${t.replace(/^#/, '')}`).join(' ')}` : '')
         if (desc.trim()) await fillFirst(page, DESC_INPUT, desc.slice(0, meta.descMax))
 
-        // 该平台页面复杂，停下等人工确认发布
-        onProgress('publishing', `${meta.name}：已填好内容，请在弹出的浏览器里手动点击发布`, 80)
-        // 保持浏览器打开一段时间，给用户操作时间
-        await delay(1000, 1000)
+        // 该平台页面复杂：等待用户在浏览器里手动点发布，并尽力检测成功
+        const startUrl = page.url()
+        const manualOk = await waitForManualPublish(page, SUCCESS_TEXTS_ALL, onProgress, 300000, startUrl)
+        if (manualOk) {
+          onProgress('success', `${meta.name} 发布成功（人工确认）`, 100)
+          return { success: true, url: page.url(), duration: Date.now() - start }
+        }
         return {
           success: false,
-          error: `${meta.name} 已自动上传并填好内容，请在浏览器中手动确认发布（该平台自动化风险高，采用人工兜底）`,
+          error: `${meta.name}：等待手动发布超时。若其实已发布成功，可在「发布记录」里忽略本条`,
           duration: Date.now() - start
         }
       } catch (err) {
@@ -235,3 +251,5 @@ export function createAssistAdapter(meta: PlatformMeta): PlatformAdapter {
     }
   }
 }
+
+const SUCCESS_TEXTS_ALL = [...SUCCESS_TEXT, 'Your video is live', 'Posted', 'Shared']

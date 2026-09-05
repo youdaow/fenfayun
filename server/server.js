@@ -19,8 +19,33 @@ const PORT = parseInt(process.env.PORT || '3880', 10)
 const TOKEN = process.env.TOKEN || ''
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'uploads')
 const MAX_SIZE = (parseInt(process.env.MAX_SIZE || '2000', 10)) * 1024 * 1024
+/** 滞留文件最长保留小时数（无人拉取的兜底清理），0 = 永不清理 */
+const TTL_HOURS = parseFloat(process.env.TTL_HOURS || '72')
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+
+// 定期清掉超期滞留的文件，避免无人拉取时磁盘涨满
+if (TTL_HOURS > 0) {
+  setInterval(
+    () => {
+      try {
+        const deadline = Date.now() - TTL_HOURS * 3600 * 1000
+        for (const f of fs.readdirSync(DATA_DIR)) {
+          const p = path.join(DATA_DIR, f)
+          try {
+            const st = fs.statSync(p)
+            if (st.isFile() && st.mtimeMs < deadline) fs.unlinkSync(p)
+          } catch (e) {
+            /* 忽略竞态 */
+          }
+        }
+      } catch (e) {
+        console.error('[ttl cleanup]', e)
+      }
+    },
+    30 * 60 * 1000
+  ).unref()
+}
 
 function safeName(name) {
   return path.basename(name).replace(/[\\/:*?"<>|]/g, '_')
@@ -32,11 +57,12 @@ function json(res, code, obj) {
 }
 
 function checkAuth(req, res, query) {
-  if (TOKEN && query.get('token') !== TOKEN) {
-    json(res, 401, { ok: false, error: '未授权' })
-    return false
-  }
-  return true
+  if (!TOKEN) return true
+  const hdr = req.headers['authorization'] || ''
+  const bearer = hdr.startsWith('Bearer ') ? hdr.slice(7).trim() : ''
+  if (query.get('token') === TOKEN || bearer === TOKEN) return true
+  json(res, 401, { ok: false, error: '未授权' })
+  return false
 }
 
 const server = http.createServer((req, res) => {
