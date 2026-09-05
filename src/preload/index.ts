@@ -85,6 +85,11 @@ const api = {
       dataRoot: string
       profilesRoot: string
       dbPath: string
+      portable: boolean
+      compatMode: boolean
+      arch: string
+      electron: string
+      chrome: string
     }>,
   openDataDir: () => ipcRenderer.invoke('app:openDataDir') as Promise<boolean>,
   setLaunchAtLogin: (enabled: boolean) =>

@@ -6,6 +6,10 @@ function send(event: WorkerEvent): void {
   process.send?.(event)
 }
 
+function disableGpu(): boolean {
+  return process.env.VDIST_DISABLE_GPU === '1'
+}
+
 async function handlePublish(msg: Extract<WorkerCommand, { type: 'publish' }>): Promise<void> {
   const adapter = getAdapter(msg.platform)
   if (!adapter) {
@@ -34,7 +38,7 @@ async function handlePublish(msg: Extract<WorkerCommand, { type: 'publish' }>): 
       percent: 3
     })
 
-    ctx = await launchContext({ profileDir: msg.profileDir, proxy: msg.proxy })
+    ctx = await launchContext({ profileDir: msg.profileDir, proxy: msg.proxy, disableGpu: disableGpu() })
     const page = ctx.pages()[0] ?? (await ctx.newPage())
 
     const state = await adapter.checkLogin(page)
@@ -118,7 +122,7 @@ async function handlePublish(msg: Extract<WorkerCommand, { type: 'publish' }>): 
 }
 
 async function handleLogin(msg: Extract<WorkerCommand, { type: 'login' }>): Promise<void> {
-  const ctx = await launchContext({ profileDir: msg.profileDir })
+  const ctx = await launchContext({ profileDir: msg.profileDir, disableGpu: disableGpu() })
   const page = ctx.pages()[0] ?? (await ctx.newPage())
   await page.goto(msg.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {})
 
@@ -143,7 +147,7 @@ async function handleCheckLogin(
 
   let ctx
   try {
-    ctx = await launchContext({ profileDir: msg.profileDir, headless: true })
+    ctx = await launchContext({ profileDir: msg.profileDir, headless: true, disableGpu: disableGpu() })
     const page = ctx.pages()[0] ?? (await ctx.newPage())
     const state = await adapter.checkLogin(page)
     send({

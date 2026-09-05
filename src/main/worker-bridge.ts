@@ -1,5 +1,7 @@
 import { fork, type ChildProcess } from 'child_process'
 import { join } from 'path'
+import { existsSync } from 'fs'
+import { app } from 'electron'
 import { getSetting } from './db'
 import type { WorkerCommand, WorkerEvent } from '../shared/types'
 
@@ -14,12 +16,17 @@ export class WorkerHandle {
 
   constructor(workerPath: string) {
     const browserPath = getSetting('browserPath', '')
+    // 兼容模式（主界面关硬件加速）时，自动化浏览器也一并关 GPU，避免老显卡黑屏
+    const compat =
+      getSetting('disableGpu', '0') === '1' ||
+      existsSync(join(app.getPath('userData'), 'safe-mode.json'))
     this.child = fork(workerPath, [], {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
       env: {
         ...process.env,
         VDIST_WORKER: '1',
-        ...(browserPath ? { VDIST_BROWSER_PATH: browserPath } : {})
+        ...(browserPath ? { VDIST_BROWSER_PATH: browserPath } : {}),
+        ...(compat ? { VDIST_DISABLE_GPU: '1' } : {})
       }
     })
     this.child.stdout?.on('data', (d: Buffer) => {

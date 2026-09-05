@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, nativeImage, protocol, net, Tray, Menu, Notification } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDB, getSetting, setSetting, countUnrecordedWorks } from './db'
 import { registerAccountIPC } from './ipc/account-ipc'
@@ -14,7 +15,6 @@ import { registerAuthIPC } from './ipc/auth-ipc'
 import { setRunnerWindow, cancelAll } from './task-runner'
 import { startScheduler } from './scheduler'
 import { startRelay } from './relay'
-import { existsSync } from 'fs'
 import { registerMediaProtocol } from './media-protocol'
 import { initLogger } from './logger'
 
@@ -22,6 +22,73 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 /** 真正退出标记（托盘菜单/更新才置真，点 X 默认只是隐藏） */
 let quitting = false
+
+/* ================= 老机器 / 异常显卡兼容 =================
+ * Electron 在部分核显、驱动过旧或远程桌面环境下可能 GPU 初始化失败导致白屏。
+ * 三重保障：
+ *  1) 用户在设置里开「兼容模式」→ 关闭硬件加速（写 safe-mode.json 标记）；
+ *  2) 启动写 boot 标记，连续 2 次没能成功进入界面就自动进兼容模式，
+ *     避免"装了打不开 / 更新后白屏"的死循环（单次强退或正常关机不误伤）；
+ *  3) 命令行 --compat 强制兼容，用于客服远程指导排障。 */
+const FLAG_FILE = join(app.getPath('userData'), 'boot-flag.json')
+const SAFE_MODE_FILE = join(app.getPath('userData'), 'safe-mode.json')
+
+interface BootFlag {
+  ok?: boolean
+  fails?: number
+  at?: number
+}
+
+function readFlag(): BootFlag | null {
+  try {
+    return existsSync(FLAG_FILE) ? (JSON.parse(readFileSync(FLAG_FILE, 'utf8')) as BootFlag) : null
+  } catch {
+    return null
+  }
+}
+
+function writeFlag(v: BootFlag): void {
+  try {
+    writeFileSync(FLAG_FILE, JSON.stringify(v), 'utf8')
+  } catch {
+    /* 标记写失败不影响启动 */
+  }
+}
+
+/** 用户主动开启兼容模式（设置页写标记文件，启动早期即可读到） */
+export function isCompatFlagOnDisk(): boolean {
+  return existsSync(SAFE_MODE_FILE)
+}
+
+let usingCompat = false
+let compatReason = ''
+
+function prepareCompatMode(): void {
+  const last = readFlag()
+  const fails = last?.ok === true ? 0 : (last?.fails ?? 0) + 1
+  const forcedByCrash = fails >= 2
+  const forcedByUser = isCompatFlagOnDisk() || process.argv.includes('--compat')
+
+  // 记录本次启动尝试（成功进入界面后会 reset）
+  writeFlag({ ok: false, fails, at: Date.now() })
+
+  if (forcedByUser || forcedByCrash) {
+    usingCompat = true
+    compatReason = forcedByCrash && !forcedByUser ? '上次启动异常，已自动启用' : '已按设置启用'
+    app.disableHardwareAcceleration()
+    app.commandLine.appendSwitch('disable-gpu')
+    app.commandLine.appendSwitch('disable-software-rasterizer')
+    app.commandLine.appendSwitch('disable-gpu-compositing')
+    console.warn('[compat] 兼容模式：已关闭硬件加速 ·', compatReason)
+  }
+}
+
+/** 成功进入界面后调用：清掉失败计数 */
+function markBootOk(): void {
+  writeFlag({ ok: true, fails: 0, at: Date.now() })
+}
+
+prepareCompatMode()
 
 function notify(title: string, body: string): void {
   try {
@@ -54,7 +121,11 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => {
+    win.show()
+    // 稳定显示 3 秒才算启动成功，避免"白屏闪一下也算起来"误清计数
+    setTimeout(() => markBootOk(), 3000)
+  })
 
   // 关闭按钮默认最小化到托盘（可在设置里关掉该行为）
   win.on('close', (e) => {

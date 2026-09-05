@@ -1,19 +1,42 @@
 import { ipcMain, app, dialog, shell } from 'electron'
+import { writeFileSync, existsSync, unlinkSync } from 'fs'
 import * as db from '../db'
-import { getDataRoot, getProfilesRoot, getDbPath } from '../paths'
+import { getDataRoot, getProfilesRoot, getDbPath, isPortable } from '../paths'
 import { join } from 'path'
 
+/** 兼容模式标记：启动早期（DB 未就绪）也要能读到，所以用独立文件 */
+function safeModeFile(): string {
+  return join(app.getPath('userData'), 'safe-mode.json')
+}
+
 export function registerSettingsIPC(): void {
-  ipcMain.handle('settings:get', () => db.getSettings())
+  ipcMain.handle('settings:get', () => {
+    const s = db.getSettings()
+    s['compatMode'] = existsSync(safeModeFile()) ? '1' : '0'
+    return s
+  })
   ipcMain.handle('settings:set', (_e, key: string, value: string) => {
     db.setSetting(key, value)
+    if (key === 'compatMode') {
+      try {
+        if (value === '1') writeFileSync(safeModeFile(), JSON.stringify({ on: true, at: Date.now() }), 'utf8')
+        else if (existsSync(safeModeFile())) unlinkSync(safeModeFile())
+      } catch {
+        /* ignore */
+      }
+    }
     return true
   })
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
     dataRoot: getDataRoot(),
     profilesRoot: getProfilesRoot(),
-    dbPath: getDbPath()
+    dbPath: getDbPath(),
+    portable: isPortable(),
+    compatMode: existsSync(safeModeFile()),
+    arch: process.arch,
+    electron: process.versions.electron,
+    chrome: process.versions.chrome
   }))
   ipcMain.handle('app:openDataDir', () => {
     void shell.openPath(getDataRoot())

@@ -1,6 +1,6 @@
 {
   "name": "video-distributor",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "分发云 · 多平台视频分发工具：29 平台、多账号、平台侧定时、草稿与模板化文案、托盘常驻、失败截图与自动重试、数据分析",
   "main": "./out/main/index.js",
   "author": "WorkBuddy",
@@ -60,16 +60,28 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "artifactName": "fenfayun-${version}-win-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "分发云"
+      "shortcutName": "分发云",
+      "artifactName": "fenfayun-setup-${version}-win-x64.${ext}"
+    },
+    "portable": {
+      "artifactName": "fenfayun-portable-${version}-win-x64.${ext}"
     }
   }
 }

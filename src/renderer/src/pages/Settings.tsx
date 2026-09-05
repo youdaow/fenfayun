@@ -7,7 +7,17 @@ import QRCode from 'qrcode'
 type InboxStatus = { running: boolean; port: number; url: string; ip: string }
 
 export default function Settings() {
-  const [info, setInfo] = useState<{ version: string; dataRoot: string; profilesRoot: string; dbPath: string } | null>(null)
+  const [info, setInfo] = useState<{
+    version: string
+    dataRoot: string
+    profilesRoot: string
+    dbPath: string
+    portable: boolean
+    compatMode: boolean
+    arch: string
+    electron: string
+    chrome: string
+  } | null>(null)
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [inbox, setInbox] = useState<InboxStatus | null>(null)
   const [qr, setQr] = useState<string>('')
@@ -229,6 +239,23 @@ export default function Settings() {
                 />
                 开机自动启动分发云
               </label>
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3.5 w-3.5 accent-brand-500"
+                  checked={(settings.compatMode ?? '0') === '1'}
+                  onChange={async (e) => {
+                    await save('compatMode', e.target.checked ? '1' : '0')
+                    alert(e.target.checked ? '已开启兼容模式，重启应用后生效（关闭硬件加速）' : '已关闭兼容模式，重启应用后生效')
+                  }}
+                />
+                <span>
+                  兼容模式（界面与自动化浏览器都关闭硬件加速）
+                  <span className="block text-[11px] text-ink-400">
+                    老显卡 / 远程桌面 / 白屏黑屏问题时开启，重启生效。连续启动异常时会自动开启。
+                  </span>
+                </span>
+              </label>
             </div>
           </Field>
         </div>
@@ -249,6 +276,16 @@ export default function Settings() {
           <Row label="数据目录" value={info?.dataRoot ?? '-'} />
           <Row label="账号 Profile 目录" value={info?.profilesRoot ?? '-'} />
           <Row label="数据库文件" value={info?.dbPath ?? '-'} />
+          {info?.portable && (
+            <Row label="运行模式" value="便携（绿色）模式：数据保存在程序目录 portable-data 内" />
+          )}
+          {info?.compatMode && (
+            <Row label="兼容模式" value="已开启（下次启动生效；硬件加速已关闭）" />
+          )}
+          <Row
+            label="运行环境"
+            value={info ? `Windows ${info.arch} · Electron ${info.electron} · Chromium ${info.chrome}` : '-'}
+          />
           <div className="flex flex-wrap gap-2 pt-2">
             <Button size="sm" onClick={() => api().openDataDir()}>
               打开数据目录
